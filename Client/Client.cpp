@@ -36,8 +36,8 @@ void Client::Connect(string IP, int PORT)
 		//exit(-1);
 	}
 	else
-		cout << "\tConnection to server SUCCESSFULLY!\t" 
-		<< "\n!!!BEFORE CLOSING THE APPLICATION, BE SURE TO DISSCONNECT FROM THE SERVER!!!\nTo disconnect, enter 'XXX'!" << endl;
+		cout << "***Connection to server SUCCESSFULLY!***" 
+		<< "\n!!!BEFORE CLOSING THE APPLICATION, BE SURE TO DISSCONNECT FROM THE SERVER!!!\n***To disconnect, enter 'XXX'***" << endl;
 	thread th([this]() 
 	{
 			ClientHandler();
@@ -123,7 +123,7 @@ bool Client::ProcessPacket(Packet packetType)
 	case P_Close:
 	{
 		closesocket(ClientSock);
-		cout << "DISCONNECTED... \nNow you can close the window. =)" << endl;
+		cout << "***DISCONNECTED***\n***Now you can close the window***" << endl;
 		return false;
 	}
 	break;

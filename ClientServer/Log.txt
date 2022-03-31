@@ -1,0 +1,5 @@
+|MESSAGE| from |Server.cpp| Server started with IP: 192.168.0.57 and PORT: 1111
+|MESSAGE| from |Server.cpp| Server started with IP: 192.168.0.57 and PORT: 1111
+|MESSAGE| from |Server.cpp| Server started with IP: 192.168.0.57 and PORT: 1111
+|MESSAGE| from |Server.cpp| Server started with IP: 192.168.0.57 and PORT: 1111
+|MESSAGE| from |Server.cpp| Server started with IP: 192.168.0.57 and PORT: 1111

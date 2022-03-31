@@ -16,10 +16,12 @@ class Server
 {
 public:
 	Server();
+	~Server();
 	void StartServer(string IP, int PORT);
 private:
 	bool ProcessPacket(int index, Packet packetType);
-	mutex mtx;
+	void ConnectingClients(sockaddr_in addr);
+	void Disconnect(SOCKET &curSock);
 	void ClientHandler(int index);
 	vector<SOCKET> connections;
 	SOCKET ServSock;

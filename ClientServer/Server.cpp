@@ -1,22 +1,27 @@
 #include "Server.h"
 #include <algorithm>
-#include <mutex>
+#include "Global.h"
 Server::Server()
 {
 	WSADATA wsData;
 	if (WSAStartup(MAKEWORD(2, 2), &wsData) != 0) 
 	{
-		cout << "Error WinSock version initializaion #" << WSAGetLastError() << endl;
+		Global::instance().getLogger().log(Message, "Server.cpp", "Error WinSock version initializaion #" + WSAGetLastError());
 		exit(-1);
 	}
 	ServSock = socket(AF_INET, SOCK_STREAM, NULL);
 	if (ServSock == INVALID_SOCKET) 
 	{
-		cout << "Error initialization socket # " << WSAGetLastError() << endl;
+		Global::instance().getLogger().log(Message, "Server.cpp", "Error initialization socket # " + WSAGetLastError());
 		closesocket(ServSock);
 		exit(-1);
 	}
 
+}
+
+Server::~Server()
+{
+	Global::instance().getLogger().log(Message, "Server.cpp", "Server stopped.");
 }
 
 void Server::StartServer(string IP, int PORT)
@@ -24,7 +29,7 @@ void Server::StartServer(string IP, int PORT)
 	in_addr ip_to_num;
 	if (inet_pton(AF_INET, IP.c_str(), &ip_to_num) <= 0)
 	{
-		cout << "Error in IP translation to special numeric format" << endl;
+		Global::instance().getLogger().log(Message, "Server.cpp", "Error in IP translation to special numeric format");
 		exit(-1);
 	}
 	sockaddr_in servInfo;
@@ -34,42 +39,62 @@ void Server::StartServer(string IP, int PORT)
 	servInfo.sin_port = htons(PORT);
 	if (bind(ServSock, (sockaddr*)&servInfo, sizeof(servInfo)) != 0)
 	{
-		cout << "Error Socket binding to server info. Error # " << WSAGetLastError() << endl;
+		Global::instance().getLogger().log(Message, "Server.cpp", "Error Socket binding to server info. Error # " + WSAGetLastError());
 		closesocket(ServSock);
 		exit(-1);
 	}
 	else
+	{
 		cout << "Server started with IP: " << IP << " and PORT: " << PORT << endl;
-
+		Global::instance().getLogger().log(Message, "Server.cpp", "Server started with IP: " + IP + " and PORT: " + to_string(PORT));
+	}
 	if (listen(ServSock, SOMAXCONN) != 0)
 	{
 		cout << "Can't start to listen to. Error # " << WSAGetLastError() << endl;
 		closesocket(ServSock);
 	}
-	else 
-	{
-		cout << "Listening..." << endl;
-	}
+	ConnectingClients(servInfo);
+}
 
-	int clientInfo_size = sizeof(servInfo);
+void Server::ConnectingClients(sockaddr_in addr)
+{
+	int clientInfo_size = sizeof(addr);
 	SOCKET ClientConn;
-	sockaddr_in clientInfo;
+	bool isEnter = false;
 	for (int i = 0; i < SOMAXCONN; i++)
 	{
-		ClientConn = accept(ServSock, (sockaddr*)&servInfo, &clientInfo_size);
-		if (ClientConn == NULL)
+		ClientConn = accept(ServSock, (sockaddr*)&addr, &clientInfo_size);
+		//ѕровер€ем есть ли до этого свободные места    
+		for (int j = 0; j < connections.size(); j++)
 		{
-			closesocket(ClientConn);
+			if (connections[j] == NULL)
+			{
+				i--;
+				cout << "Connected \tID " << j << endl;
+				connections[j] = ClientConn;
+				isEnter = true;
+				thread th([this, j]()
+					{
+						ClientHandler(j);
+					});
+				th.detach();
+				this_thread::sleep_for(chrono::milliseconds(10));
+				break;
+			}
+		}
+
+		if (isEnter)
+		{
+			isEnter = false;
 			continue;
 		}
 		else
 		{
 			connections.push_back(ClientConn);
-			cout << "Current number of connections " << connections.size() << endl;
-			cout << "Client has connected!" << endl;
-			thread th([this, i]() 
+			cout << "Connected \tID " << i << endl;
+			thread th([this, i]()
 				{
-					ClientHandler(i); 
+					ClientHandler(i);
 				});
 			th.detach();
 			this_thread::sleep_for(chrono::milliseconds(10));
@@ -78,16 +103,11 @@ void Server::StartServer(string IP, int PORT)
 }
 
 bool Server::ProcessPacket(int index, Packet packetType)
-{
-	if (index >= connections.size())
-		index--;
-	
-	cout << "Current index" << index << endl;
+{	
 	switch (packetType)
 	{
 	case P_ChatMessage:
 	{
-		cout << "Message" << endl;
 		int msg_size;
 		if (recv(connections[index], (char*)&msg_size, sizeof(int), NULL) == SOCKET_ERROR) closesocket(connections[index]);
 		char* msg = new char[msg_size + 1];
@@ -96,7 +116,7 @@ bool Server::ProcessPacket(int index, Packet packetType)
 
 		for (auto conn : connections)
 		{
-			if (conn == connections[index]) continue;
+			if (conn == connections[index] || conn == NULL) continue;
 			Packet packetType = P_ChatMessage;
 			if (send(conn, (char*)&packetType, sizeof(Packet), NULL) == SOCKET_ERROR) closesocket(connections[index]);
 			if (send(conn, (char*)&msg_size, sizeof(int), NULL) == SOCKET_ERROR) closesocket(connections[index]);
@@ -107,7 +127,7 @@ bool Server::ProcessPacket(int index, Packet packetType)
 	break;
 	case P_Close:
 	{
-		cout << "Client disconnected" << endl;
+		cout << "Disconnected \tID " << index << endl;
 		return false;
 	}
 	break;
@@ -126,16 +146,17 @@ void Server::ClientHandler(int index)
 	Packet packetType;
 	while (true)
 	{
-		if (index >= connections.size())
-			index--;
 		recv(connections[index], (char*)&packetType, sizeof(Packet), NULL);
 		if (!ProcessPacket(index, packetType)) break;
 	}
-	packetType = P_Close;
-	send(connections[index], (char*)&packetType, sizeof(Packet), NULL);
-	closesocket(connections[index]);
-	connections.erase(connections.begin() + index);
-	cout << "Connection closed" << endl;
-	cout << "Current number of connections " << connections.size() << endl;
+	Disconnect(connections[index]);
 	return;
+}
+
+void Server::Disconnect(SOCKET& curSock)
+{
+	Packet packetType = P_Close;
+	send(curSock, (char*)&packetType, sizeof(Packet), NULL);
+	closesocket(curSock);
+	curSock = 0;
 }
