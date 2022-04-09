@@ -1,13 +1,15 @@
 #include "Client.h"
 #include <iostream>
 #include "Types.h"
+#include <mutex>
 using namespace std;
+mutex mtx;
 Client::Client()
 {
 	WSADATA wsData;
 	if (WSAStartup(MAKEWORD(2, 2), &wsData) != NULL) 
 	{
-		cout << "Error WinSock version initializaion #" << WSAGetLastError() << endl;
+		cout << "ОШИБКА #" << WSAGetLastError() << endl;
 		exit(-1);
 	}
 	ClientSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -30,20 +32,42 @@ void Client::Connect(string IP, int PORT)
 	servInfo.sin_port = htons(PORT);
 	if (connect(ClientSock, (sockaddr*)&servInfo, sizeof(servInfo)) != NULL)
 	{
-		cout << "Connection to Server is FAILED. Error # " << WSAGetLastError() << endl;
+		cout << "ОШИБКА # " << WSAGetLastError() << endl;
 		closesocket(ClientSock);
 		WSACleanup();
-		//exit(-1);
 	}
 	else
-		cout << "***Connection to server SUCCESSFULLY!***" 
-		<< "\n!!!BEFORE CLOSING THE APPLICATION, BE SURE TO DISSCONNECT FROM THE SERVER!!!\n***To disconnect, enter 'XXX'***" << endl;
-	thread th([this]() 
 	{
-			ClientHandler();
-	});
-	th.detach();
-	SendingMess();
+		cout << "***Подлючение к серверу выполнено!***"
+			<< "\n!!!ВНИМАНИЕ! Перед закрытием приложения нужно обязательно отключиться от сервера!!!\n***Для отключения введите 'XXX'***" << endl;
+		if (!Authorization())
+		{
+			cout << "Ошибка авторицации!" << endl;
+			return;
+		}
+		cout << "Добро пожаловать на сервер " << userName << "!" << endl;
+		thread th([this]()
+			{
+				ClientHandler();
+			});
+		th.detach();
+		SendingMess();
+	}
+}
+
+bool Client::Authorization()
+{
+	bool isAuthorize = false;
+	cout << "Введите свое имя: ";
+	getline(cin, userName);
+	cout << endl;
+	Packet packetType = P_Authorize;
+	send(ClientSock, (char*)&packetType, sizeof(Packet), NULL);
+	int msg_size = userName.size();
+	send(ClientSock, (char*)&msg_size, sizeof(int), NULL);
+	send(ClientSock, userName.c_str(), msg_size, NULL);
+	recv(ClientSock, (char*)&isAuthorize, sizeof(bool), NULL);
+	return isAuthorize;
 }
 
 void Client::CheckSocket()
@@ -60,17 +84,20 @@ void Client::CheckSocket()
 void Client::SendingMess()
 {
 	short packet_size = 0;
+	string cin_str;
 	string msg;												// The size of sending / receiving packet in bytes
 	while (true)
 	{
-		getline(cin, msg);
-		if (msg == "XXX")
+		mtx.lock();
+		getline(cin, cin_str);
+		if (cin_str == "XXX" || cin_str == "ХХХ")
 		{
 			Close();
 			break;
 		}
 		else
 		{ 
+			msg = userName + ": " + cin_str;
 			Packet packetType = P_ChatMessage;
 			send(ClientSock, (char*)&packetType, sizeof(Packet), NULL);
 			int msg_size = msg.size();
@@ -78,6 +105,7 @@ void Client::SendingMess()
 			send(ClientSock, msg.c_str(), msg_size, NULL);
 			Sleep(10);
 		}
+		mtx.unlock();
 	}
 }
 
@@ -103,7 +131,7 @@ bool Client::ProcessPacket(Packet packetType)
 		packet_size = recv(ClientSock, (char*)&msg_size, sizeof(int), NULL);
 		if (packet_size == SOCKET_ERROR)
 		{
-			cout << "Can't recieve a massage from server\n";
+			cout << "Невозможно получить сообщение от сервера" << endl;
 			closesocket(ClientSock);
 			WSACleanup();
 		}
@@ -112,10 +140,11 @@ bool Client::ProcessPacket(Packet packetType)
 		packet_size = recv(ClientSock, msg, msg_size, NULL);
 		if (packet_size == SOCKET_ERROR)
 		{
-			cout << "Can't recieve a massage from server\n";
+			cout << "Невозможно получить сообщение от сервера" << endl;
 			closesocket(ClientSock);
 			WSACleanup();
 		}
+		cout << "\n------------------------------------------------------------------------------" << endl;
 		cout << msg << endl;
 		delete[] msg; 
 	}
@@ -123,13 +152,13 @@ bool Client::ProcessPacket(Packet packetType)
 	case P_Close:
 	{
 		closesocket(ClientSock);
-		cout << "***DISCONNECTED***\n***Now you can close the window***" << endl;
+		cout << "***ОТКЛЮЧЕНО***\n***Теперь вы можете закрыть окно***" << endl;
 		return false;
 	}
 	break;
 	default:
 	{
-		cout << "Unrecognized packet: " << packetType << endl;
+		cout << "Неизвестный тип пакета: " << packetType << endl;
 		break;
 	}
 	}

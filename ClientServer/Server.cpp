@@ -125,6 +125,17 @@ bool Server::ProcessPacket(int index, Packet packetType)
 		delete[] msg;
 	}
 	break;
+	case P_Authorize:
+	{
+		bool isAuthorization = true;
+		int msg_size;
+		if (recv(connections[index], (char*)&msg_size, sizeof(int), NULL) == SOCKET_ERROR) closesocket(connections[index]);
+		char* name = new char[msg_size + 1];
+		name[msg_size] = '\0';
+		if (recv(connections[index], name, msg_size, NULL) == SOCKET_ERROR) closesocket(connections[index]);
+		send(connections[index], (char*)&isAuthorization, sizeof(bool), NULL);
+	}
+	break;
 	case P_Close:
 	{
 		cout << "Disconnected \tID " << index << endl;

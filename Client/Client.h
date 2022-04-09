@@ -20,6 +20,8 @@ public:
 	void ClientHandler();
 private:
 	SOCKET ClientSock;
+	string userName;
+	bool Authorization();
 	void CheckSocket();
 	void SendingMess();
 	bool ProcessPacket(Packet packetType);
